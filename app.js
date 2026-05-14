@@ -23,6 +23,7 @@ function init() {
         scene.background = new THREE.Color(0x000000); 
 
         const aspect = window.innerWidth / window.innerHeight;
+        // Flat, projection-friendly camera
         camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
         camera.position.z = 10;
 
@@ -31,9 +32,9 @@ function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        // 3. CINEMATIC BLOOM SETUP (Using Global THREE objects)
+        // 3. CINEMATIC BLOOM SETUP 
         const renderScene = new THREE.RenderPass(scene, camera);
-        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 3.0, 1.0, 0.1);
+        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 1.0, 0.1);
         
         composer = new THREE.EffectComposer(renderer);
         composer.addPass(renderScene);
@@ -75,7 +76,7 @@ function createParticles() {
     const texture = new THREE.CanvasTexture(canvas);
 
     const material = new THREE.PointsMaterial({
-        size: 1.2, 
+        size: 80, // <--- THE FIX! 80 PIXELS WIDE
         map: texture,
         vertexColors: true,
         blending: THREE.AdditiveBlending,
@@ -84,6 +85,10 @@ function createParticles() {
     });
 
     particleSystem = new THREE.Points(geometry, material);
+    
+    // <--- SAFETY FIX: Forces Three.js to always render the particles even if they fly off-screen
+    particleSystem.frustumCulled = false; 
+    
     scene.add(particleSystem);
 }
 
@@ -99,12 +104,12 @@ function emitParticle(x, y, baseColor) {
     colors[i3 + 2] = baseColor.b * 1.5;
 
     const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 0.2;
+    const speed = Math.random() * 0.08; // Slower, more magical spread
     velocities[i3] = Math.cos(angle) * speed;
     velocities[i3 + 1] = Math.sin(angle) * speed;
     velocities[i3 + 2] = 0;
 
-    lifetimes[particleIndex] = 60 + Math.random() * 40;
+    lifetimes[particleIndex] = 60 + Math.random() * 60; // Live longer
 
     particleIndex = (particleIndex + 1) % MAX_PARTICLES;
 }
@@ -176,15 +181,15 @@ function animate() {
             const i3 = i * 3;
             positions[i3] += velocities[i3];
             positions[i3 + 1] += velocities[i3 + 1];
-            velocities[i3 + 1] -= 0.002; 
-            velocities[i3] *= 0.98; 
+            velocities[i3 + 1] -= 0.001; // Gentle gravity
+            velocities[i3] *= 0.98; // Air friction
             lifetimes[i]--;
 
             if (lifetimes[i] < 20) {
-                colors[i3] *= 0.8; colors[i3 + 1] *= 0.8; colors[i3 + 2] *= 0.8;
+                colors[i3] *= 0.85; colors[i3 + 1] *= 0.85; colors[i3 + 2] *= 0.85;
             }
         } else {
-            positions[i * 3 + 1] = -100;
+            positions[i * 3 + 1] = -100; // Move dead particles off screen
         }
     }
 
