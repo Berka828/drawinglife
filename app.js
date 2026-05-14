@@ -1,121 +1,87 @@
 // app.js
-const canvas = document.getElementById('webgl-canvas');
-const videoElement = document.getElementById('video-feed');
 let scene, camera, renderer, drawings = [];
-let handPointer = new THREE.Vector2(-2, -2); // Default offscreen
+let handPos = new THREE.Vector2(-10, -10);
 
-// --- Step 1: Three.js Setup ---
-function initThreeJS() {
+function init() {
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+    scene.background = new THREE.Color(0x222222);
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 5;
 
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Add some light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1);
-    scene.add(ambientLight);
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(1, 1, 1).normalize();
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 
     animate();
+    initMediaPipe();
 }
 
-// --- Step 2: Spawn Scanned Drawing ---
-window.spawnDrawing = function(textureCanvas) {
-    const texture = new THREE.CanvasTexture(textureCanvas);
-    texture.minFilter = THREE.LinearFilter;
-    
-    // Create a 2D plane for the drawing
-    const geometry = new THREE.PlaneGeometry(2, 2 * (textureCanvas.height / textureCanvas.width));
+// Global function called by scanner.js
+window.spawnInThreeJS = function(canvasSource) {
+    const texture = new THREE.CanvasTexture(canvasSource);
+    const geometry = new THREE.PlaneGeometry(1.5, 1.5 * (canvasSource.height / canvasSource.width));
     const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
     
-    const plane = new THREE.Mesh(geometry, material);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set((Math.random() - 0.5) * 5, (Math.random() - 0.5) * 3, 0);
+    mesh.userData = { velX: (Math.random() - 0.5) * 0.02, velY: (Math.random() - 0.5) * 0.02 };
     
-    // Random spawn position
-    plane.position.x = (Math.random() - 0.5) * 8;
-    plane.position.y = (Math.random() - 0.5) * 4;
-    
-    // Add custom properties for animation
-    plane.userData = {
-        velocityX: (Math.random() - 0.5) * 0.05,
-        velocityY: (Math.random() - 0.5) * 0.05
-    };
-
-    scene.add(plane);
-    drawings.push(plane);
-    console.log("Drawing spawned!");
+    scene.add(mesh);
+    drawings.push(mesh);
 };
 
-// --- Step 3: MediaPipe Hands Setup ---
-const hands = new Hands({locateFile: (file) => {
-    return \`https://cdn.jsdelivr.net/npm/@mediapipe/hands/\${file}\`;
-}});
-hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+function initMediaPipe() {
+    const videoElement = document.getElementById('video-feed');
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    
+    hands.onResults((results) => {
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            const point = results.multiHandLandmarks[0][8]; // Index finger
+            handPos.x = (point.x - 0.5) * -10; // Simple mapping
+            handPos.y = (point.y - 0.5) * -6;
+        }
+    });
 
-hands.onResults((results) => {
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        // Get index finger tip (landmark 8)
-        const indexFinger = results.multiHandLandmarks[0][8];
-        
-        // Map normalized MediaPipe coords (0 to 1) to Three.js world space
-        // Note: X is inverted in mirrored webcams
-        const vector = new THREE.Vector3(
-            -(indexFinger.x * 2 - 1), 
-            -(indexFinger.y * 2 - 1), 
-            0.5
-        );
-        vector.unproject(camera);
-        const dir = vector.sub(camera.position).normalize();
-        const distance = -camera.position.z / dir.z;
-        const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-        
-        handPointer.set(pos.x, pos.y);
-    } else {
-        handPointer.set(-100, -100); // Move offscreen if no hands
-    }
-});
+    const cameraControl = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 640, height: 480
+    });
+    cameraControl.start();
+}
 
-const cameraUtils = new Camera(videoElement, {
-    onFrame: async () => { await hands.send({image: videoElement}); },
-    width: 640, height: 480
-});
-cameraUtils.start();
-
-// --- Step 4: Animation & Interaction Loop ---
 function animate() {
     requestAnimationFrame(animate);
+    
+    drawings.forEach(d => {
+        d.position.x += d.userData.velX;
+        d.position.y += d.userData.velY;
 
-    drawings.forEach(drawing => {
-        // Floating movement
-        drawing.position.x += drawing.userData.velocityX;
-        drawing.position.y += drawing.userData.velocityY;
+        // Bounce
+        if (Math.abs(d.position.x) > 5) d.userData.velX *= -1;
+        if (Math.abs(d.position.y) > 3) d.userData.velY *= -1;
 
-        // Bounce off walls (rough bounds)
-        if (drawing.position.x > 5 || drawing.position.x < -5) drawing.userData.velocityX *= -1;
-        if (drawing.position.y > 3 || drawing.position.y < -3) drawing.userData.velocityY *= -1;
-
-        // Interaction: Run away from hand
-        const dist = Math.sqrt(
-            Math.pow(drawing.position.x - handPointer.x, 2) + 
-            Math.pow(drawing.position.y - handPointer.y, 2)
-        );
-
-        if (dist < 2.0) { // If hand is close
-            drawing.position.x += (drawing.position.x - handPointer.x) * 0.05;
-            drawing.position.y += (drawing.position.y - handPointer.y) * 0.05;
+        // Interactive "Push"
+        const dist = d.position.distanceTo(new THREE.Vector3(handPos.x, handPos.y, 0));
+        if (dist < 1.5) {
+            d.position.x += (d.position.x - handPos.x) * 0.1;
+            d.position.y += (d.position.y - handPos.y) * 0.1;
         }
     });
 
     renderer.render(scene, camera);
 }
 
-// Handle window resize
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-initThreeJS();
+init();
