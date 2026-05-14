@@ -1,52 +1,37 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BxCM Pitch Lab</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-width=1.0">
+    <title>BxCM Interactive Drawing</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #webgl-canvas { position: absolute; top: 0; left: 0; z-index: 1; }
+        #video-feed { position: absolute; top: 10px; right: 10px; width: 320px; z-index: 2; border: 2px solid white; border-radius: 8px;}
+        #ui-layer { position: absolute; bottom: 20px; left: 20px; z-index: 3; color: white; font-family: sans-serif; }
+        button { padding: 15px 30px; font-size: 18px; cursor: pointer; background: #ff6b6b; border: none; border-radius: 5px; color: white; font-weight: bold;}
+    </style>
+    <!-- Import Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://docs.opencv.org/4.5.2/opencv.js" async></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <div class="appShell">
-    <div class="topBar">
-      <div class="titleBlock">
-        <p class="eyebrow">BxCM Jr. Sluggers Academy</p>
-        <h1>Pitch Lab</h1>
-        <p class="sub">Load your arm, throw forward, hit the glowing zone.</p>
-      </div>
 
-      <div class="controls">
-        <select id="cameraSelect" aria-label="Choose camera"></select>
-        <button id="startBtn" type="button">Start Camera</button>
-        <button id="resetBtn" class="secondary" type="button">Reset Game</button>
-      </div>
+    <!-- Three.js Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+    
+    <!-- Webcam Feed for Scanning & Tracking -->
+    <video id="video-feed" autoplay playsinline></video>
+
+    <!-- UI -->
+    <div id="ui-layer">
+        <button id="scan-btn">📸 Scan Drawing</button>
     </div>
 
-    <div class="mainGrid">
-      <aside class="sidePanel">
-        <div class="panelTag">Player Silhouette</div>
-
-        <div class="videoWrap">
-          <video id="webcam" autoplay playsinline muted></video>
-          <canvas id="overlay"></canvas>
-          <div class="videoTint"></div>
-        </div>
-
-        <div class="statusCard">
-          <p id="status">Press Start Camera to begin.</p>
-        </div>
-      </aside>
-
-      <section id="gamePanel">
-        <div class="gameCanvasWrap">
-          <canvas id="gameCanvas" width="1365" height="768"></canvas>
-        </div>
-      </section>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
-  <script src="app.js"></script>
+    <!-- Application Scripts -->
+    <script src="scanner.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
