@@ -3,26 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BxCM | Magical Particle Wall</title>
+    <title>BxCM | Magical Bloom Wall</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif;}
         #webgl-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        /* Hide the video completely so only the magic is projected */
-        #video-feed { display: none; }
-        #status-ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.5); z-index: 10; pointer-events: none;}
+        #video-feed { display: none; /* Hide camera feed for pure magic */ }
+        #status-ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.8); z-index: 10; pointer-events: none; font-weight: bold; font-size: 18px; text-shadow: 0px 0px 5px #000;}
     </style>
 
-    <!-- Import Map for Modern Three.js & Post-Processing -->
+    <!-- Reliable CDN for Three.js and Post-Processing Shaders -->
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.150.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.150.0/examples/jsm/"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/"
             }
         }
     </script>
 
-    <!-- MediaPipe Core Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
@@ -31,9 +29,9 @@
     <video id="video-feed" autoplay playsinline crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
     
-    <div id="status-ui">Initializing Engine & AI Tracker...</div>
+    <div id="status-ui">Loading High-Res Engine...</div>
 
-    <!-- Main Application -->
+    <!-- Load App as a Module -->
     <script type="module" src="app.js"></script>
 
 </body>
