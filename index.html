@@ -7,33 +7,34 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif;}
         #webgl-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        #video-feed { display: none; /* Hide camera feed for pure magic */ }
+        #video-feed { display: none; }
         #status-ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.8); z-index: 10; pointer-events: none; font-weight: bold; font-size: 18px; text-shadow: 0px 0px 5px #000;}
     </style>
 
-    <!-- Reliable CDN for Three.js and Post-Processing Shaders -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/"
-            }
-        }
-    </script>
+    <!-- 1. Core Three.js (r128 - Bulletproof version) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
+    <!-- 2. Post-Processing Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <!-- 3. MediaPipe -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
-    <!-- CRITICAL: Added 'muted' to allow autoplay in modern browsers -->
     <video id="video-feed" autoplay playsinline muted crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
     
     <div id="status-ui">Loading High-Res Engine...</div>
 
-    <!-- Load App as a Module -->
-    <script type="module" src="app.js"></script>
+    <!-- 4. Our App Logic (Standard Script, NO module) -->
+    <script src="app.js"></script>
 
 </body>
 </html>
