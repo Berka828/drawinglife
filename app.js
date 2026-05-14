@@ -1,5 +1,8 @@
 // app.js
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // --- Configuration ---
 const MAX_PARTICLES = 15000;
@@ -7,41 +10,53 @@ const HAND_COLORS = [
     new THREE.Color(0x00ffff), // Cyan
     new THREE.Color(0xff00ff), // Magenta
     new THREE.Color(0xffff00), // Yellow
-    new THREE.Color(0x00ff88)  // Mint Green
+    new THREE.Color(0x00ff88)  // Mint
 ];
 
-// --- Globals ---
-let scene, camera, renderer;
+let scene, camera, renderer, composer;
 let particleSystem, positions, colors, velocities, lifetimes;
 let particleIndex = 0;
 let pointers = [];
 
 const statusUI = document.getElementById('status-ui');
 
-// --- Initialization ---
 function init() {
-    // 1. Setup Scene & Camera
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000000); // Pure black for projection
-    
-    const aspect = window.innerWidth / window.innerHeight;
-    camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
-    camera.position.z = 10;
+    try {
+        // 1. Scene & Camera
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000); // Crucial for Bloom
 
-    // 2. Setup Standard Renderer (No Post-Processing)
-    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: false });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        const aspect = window.innerWidth / window.innerHeight;
+        camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
+        camera.position.z = 10;
 
-    // 3. Create Particle Engine
-    createParticles();
+        // 2. Renderer
+        renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-    // 4. Handle Resizing
-    window.addEventListener('resize', onWindowResize);
+        // 3. CINEMATIC BLOOM SETUP
+        const renderScene = new RenderPass(scene, camera);
+        
+        // UnrealBloomPass parameters: (resolution, strength, radius, threshold)
+        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 3.0, 1.0, 0.1);
+        
+        composer = new EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
 
-    // 5. Start Loop & Tracking
-    animate();
-    initMediaPipe();
+        // 4. Create Particles
+        createParticles();
+
+        window.addEventListener('resize', onWindowResize);
+
+        // 5. Start
+        animate();
+        initMediaPipe();
+    } catch (e) {
+        statusUI.innerText = "Engine Error: " + e.message;
+        console.error(e);
+    }
 }
 
 function createParticles() {
@@ -54,12 +69,11 @@ function createParticles() {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    // Create a softer, larger circle texture
+    // Particle Texture
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    // Force a strong white core so AdditiveBlending makes it glow
     gradient.addColorStop(0, 'rgba(255,255,255,1)');
     gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
     gradient.addColorStop(1, 'rgba(255,255,255,0)');
@@ -67,22 +81,19 @@ function createParticles() {
     ctx.fillRect(0, 0, 64, 64);
     const texture = new THREE.CanvasTexture(canvas);
 
-    // Additive blending handles the "Glow" natively!
     const material = new THREE.PointsMaterial({
-        size: 0.8, // Increased size significantly
+        size: 1.2, // Big particles so the Bloom catches them
         map: texture,
         vertexColors: true,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        transparent: true,
-        opacity: 1.0 // Increased opacity
+        transparent: true
     });
 
     particleSystem = new THREE.Points(geometry, material);
     scene.add(particleSystem);
 }
 
-// --- Interaction Logic ---
 function emitParticle(x, y, baseColor) {
     const i3 = particleIndex * 3;
 
@@ -90,42 +101,34 @@ function emitParticle(x, y, baseColor) {
     positions[i3 + 1] = y;
     positions[i3 + 2] = 0;
 
-    // Use full brightness for the colors to ensure they pop
-    colors[i3] = baseColor.r;
-    colors[i3 + 1] = baseColor.g;
-    colors[i3 + 2] = baseColor.b;
+    // Over-saturate the colors slightly to push the Bloom threshold
+    colors[i3] = baseColor.r * 1.5;
+    colors[i3 + 1] = baseColor.g * 1.5;
+    colors[i3 + 2] = baseColor.b * 1.5;
 
-    // Explosion velocity
     const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 0.2; // slightly faster explosion
+    const speed = Math.random() * 0.2;
     velocities[i3] = Math.cos(angle) * speed;
     velocities[i3 + 1] = Math.sin(angle) * speed;
     velocities[i3 + 2] = 0;
 
-    lifetimes[particleIndex] = 60 + Math.random() * 60;
+    lifetimes[particleIndex] = 60 + Math.random() * 40;
 
     particleIndex = (particleIndex + 1) % MAX_PARTICLES;
 }
 
-// --- AI Tracking ---
 function initMediaPipe() {
     const videoElement = document.getElementById('video-feed');
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     
-    hands.setOptions({ 
-        maxNumHands: 4, 
-        modelComplexity: 1, 
-        minDetectionConfidence: 0.6, 
-        minTrackingConfidence: 0.6 
-    });
+    hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
     
     hands.onResults((results) => {
         pointers = []; 
         if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            statusUI.innerText = `System Active | Tracking ${results.multiHandLandmarks.length} Hands`;
+            statusUI.innerText = `Magic Active | Tracking ${results.multiHandLandmarks.length} Hands`;
             
             results.multiHandLandmarks.forEach((landmarks, index) => {
-                // Track BOTH the index finger and the palm to emit more magic!
                 const indexTip = landmarks[8]; 
                 const palm = landmarks[0];
                 
@@ -135,22 +138,11 @@ function initMediaPipe() {
                 
                 const color = HAND_COLORS[index % HAND_COLORS.length];
                 
-                // Add index finger
-                pointers.push({ 
-                    x: -((indexTip.x - 0.5) * viewWidth), 
-                    y: -((indexTip.y - 0.5) * viewHeight), 
-                    color: color 
-                });
-
-                // Add palm center
-                pointers.push({ 
-                    x: -((palm.x - 0.5) * viewWidth), 
-                    y: -((palm.y - 0.5) * viewHeight), 
-                    color: color 
-                });
+                pointers.push({ x: -((indexTip.x - 0.5) * viewWidth), y: -((indexTip.y - 0.5) * viewHeight), color: color });
+                pointers.push({ x: -((palm.x - 0.5) * viewWidth), y: -((palm.y - 0.5) * viewHeight), color: color });
             });
         } else {
-            statusUI.innerText = "System Active | No Hands Detected";
+            statusUI.innerText = "Step in front of the camera to play!";
         }
     });
 
@@ -160,39 +152,30 @@ function initMediaPipe() {
     });
     
     cameraControl.start().then(() => {
-        statusUI.innerText = "Camera Started. Analyzing...";
+        statusUI.innerText = "Warming up projectors...";
     });
 }
 
-// --- Physics & Render Loop ---
 function animate() {
     requestAnimationFrame(animate);
 
-    // 1. Emit new particles where hands are
+    // Emit
     pointers.forEach(p => {
-        for(let i=0; i<3; i++) { // 3 per point, but we have 2 points per hand now!
-            emitParticle(p.x, p.y, p.color);
-        }
+        for(let i=0; i<4; i++) emitParticle(p.x, p.y, p.color);
     });
 
-    // 2. Update existing particles
+    // Update
     for (let i = 0; i < MAX_PARTICLES; i++) {
         if (lifetimes[i] > 0) {
             const i3 = i * 3;
-            
             positions[i3] += velocities[i3];
             positions[i3 + 1] += velocities[i3 + 1];
-
-            velocities[i3 + 1] -= 0.002; // gravity
-            velocities[i3] *= 0.98; // drag
-
+            velocities[i3 + 1] -= 0.002; 
+            velocities[i3] *= 0.98; 
             lifetimes[i]--;
 
             if (lifetimes[i] < 20) {
-                // Fade out rapidly at the end
-                colors[i3] *= 0.7;
-                colors[i3 + 1] *= 0.7;
-                colors[i3 + 2] *= 0.7;
+                colors[i3] *= 0.8; colors[i3 + 1] *= 0.8; colors[i3 + 2] *= 0.8;
             }
         } else {
             positions[i * 3 + 1] = -100;
@@ -202,8 +185,25 @@ function animate() {
     particleSystem.geometry.attributes.position.needsUpdate = true;
     particleSystem.geometry.attributes.color.needsUpdate = true;
 
-    // Render scene directly
-    renderer.render(scene, camera);
+    // Render with Bloom
+    try {
+        composer.render();
+    } catch(e) {
+        console.error("Render Loop Error:", e);
+        statusUI.innerText = "Error during render. Check console.";
+    }
 }
 
 function onWindowResize() {
+    const aspect = window.innerWidth / window.innerHeight;
+    camera.left = -aspect * 5;
+    camera.right = aspect * 5;
+    camera.top = 5;
+    camera.bottom = -5;
+    camera.updateProjectionMatrix();
+    
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+}
+
+init();
