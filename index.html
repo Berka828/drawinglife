@@ -3,48 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BxCM | Interactive Sketch</title>
+    <title>BxCM | Magical Particle Wall</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif;}
         #webgl-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
-        #video-feed { position: absolute; top: 10px; right: 10px; width: 240px; border: 2px solid #fff; border-radius: 10px; z-index: 10; transform: scaleX(-1); }
-        #ui { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 20; text-align: center; }
-        #scan-btn { padding: 20px 40px; font-size: 20px; cursor: pointer; background: #999; border: none; border-radius: 50px; color: white; font-weight: bold; transition: 0.3s; pointer-events: none; }
-        #status { color: #fff; margin-top: 10px; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; }
+        /* Hide the video completely so only the magic is projected */
+        #video-feed { display: none; }
+        #status-ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.5); z-index: 10; pointer-events: none;}
     </style>
+
+    <!-- Import Map for Modern Three.js & Post-Processing -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- MediaPipe Core Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
     <video id="video-feed" autoplay playsinline crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
-
-    <div id="ui">
-        <button id="scan-btn">LOADING AI...</button>
-        <div id="status">Waiting for OpenCV.js...</div>
-    </div>
-
-    <!-- Core Libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     
-    <!-- OpenCV (loads asynchronously) -->
-    <script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onOpenCvReady();"></script>
+    <div id="status-ui">Initializing Engine & AI Tracker...</div>
 
-    <!-- App Logic (loaded after libraries) -->
-    <script src="app.js"></script>
-    <script src="scanner.js"></script>
+    <!-- Main Application -->
+    <script type="module" src="app.js"></script>
 
-    <script>
-        // This function runs when OpenCV is finally loaded, unlocking the scan button.
-        function onOpenCvReady() {
-            console.log("OpenCV Ready");
-            const btn = document.getElementById('scan-btn');
-            btn.innerText = "📸 SCAN DRAWING";
-            btn.style.background = "#ff6b6b";
-            btn.style.pointerEvents = "auto";
-            document.getElementById('status').innerText = "System Ready. Hold drawing to camera.";
-        }
-    </script>
 </body>
 </html>
