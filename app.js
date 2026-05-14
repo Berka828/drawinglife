@@ -22,7 +22,7 @@ const statusUI = document.getElementById('status-ui');
 
 function init() {
     try {
-        // 1. Scene & Camera
+        // 1. Scene & Camera setup
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x000000); // Crucial for Bloom
 
@@ -30,7 +30,7 @@ function init() {
         camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
         camera.position.z = 10;
 
-        // 2. Renderer
+        // 2. Renderer setup
         renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -45,12 +45,12 @@ function init() {
         composer.addPass(renderScene);
         composer.addPass(bloomPass);
 
-        // 4. Create Particles
+        // 4. Create the Particles
         createParticles();
 
         window.addEventListener('resize', onWindowResize);
 
-        // 5. Start
+        // 5. Start engine
         animate();
         initMediaPipe();
     } catch (e) {
@@ -69,7 +69,7 @@ function createParticles() {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    // Particle Texture
+    // Particle Texture setup
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
@@ -82,7 +82,7 @@ function createParticles() {
     const texture = new THREE.CanvasTexture(canvas);
 
     const material = new THREE.PointsMaterial({
-        size: 1.2, // Big particles so the Bloom catches them
+        size: 1.2, 
         map: texture,
         vertexColors: true,
         blending: THREE.AdditiveBlending,
@@ -101,7 +101,7 @@ function emitParticle(x, y, baseColor) {
     positions[i3 + 1] = y;
     positions[i3 + 2] = 0;
 
-    // Over-saturate the colors slightly to push the Bloom threshold
+    // Saturate the colors to push the Bloom threshold
     colors[i3] = baseColor.r * 1.5;
     colors[i3 + 1] = baseColor.g * 1.5;
     colors[i3 + 2] = baseColor.b * 1.5;
@@ -146,25 +146,42 @@ function initMediaPipe() {
         }
     });
 
-    const cameraControl = new Camera(videoElement, {
-        onFrame: async () => { await hands.send({image: videoElement}); },
-        width: 640, height: 480
-    });
+    // Native Camera Override to force permissions
+    statusUI.innerText = "Requesting Camera Permission...";
     
-    cameraControl.start().then(() => {
-        statusUI.innerText = "Warming up projectors...";
-    });
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+        .then((stream) => {
+            videoElement.srcObject = stream;
+            
+            videoElement.onloadedmetadata = () => {
+                videoElement.play();
+                
+                const cameraControl = new Camera(videoElement, {
+                    onFrame: async () => { await hands.send({image: videoElement}); },
+                    width: 640, height: 480
+                });
+                
+                cameraControl.start().then(() => {
+                    statusUI.innerText = "Camera Started. Warming up projectors...";
+                });
+            };
+        })
+        .catch((err) => {
+            console.error("Camera Error:", err);
+            statusUI.innerText = "CAMERA BLOCKED! Check browser permissions.";
+            statusUI.style.color = "red";
+        });
 }
 
 function animate() {
     requestAnimationFrame(animate);
 
-    // Emit
+    // Emit new particles
     pointers.forEach(p => {
         for(let i=0; i<4; i++) emitParticle(p.x, p.y, p.color);
     });
 
-    // Update
+    // Update existing particles
     for (let i = 0; i < MAX_PARTICLES; i++) {
         if (lifetimes[i] > 0) {
             const i3 = i * 3;
@@ -185,7 +202,7 @@ function animate() {
     particleSystem.geometry.attributes.position.needsUpdate = true;
     particleSystem.geometry.attributes.color.needsUpdate = true;
 
-    // Render with Bloom
+    // Render with Post-Processing Bloom
     try {
         composer.render();
     } catch(e) {
@@ -206,4 +223,5 @@ function onWindowResize() {
     composer.setSize(window.innerWidth, window.innerHeight);
 }
 
+// Start the engine
 init();
