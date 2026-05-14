@@ -1,4 +1,3 @@
-print("""
 // scanner.js
 window.scanDrawing = function() {
     console.log("Starting Scan...");
@@ -46,12 +45,20 @@ window.scanDrawing = function() {
             // 4. Create an Alpha Mask from the cropped drawing
             let alphaMask = new cv.Mat();
             cv.cvtColor(croppedColor, alphaMask, cv.COLOR_RGBA2GRAY);
+            
+            // Otsu's thresholding automatically adapts to the lighting in your room!
             cv.threshold(alphaMask, alphaMask, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
             // 5. Add an alpha channel to the color crop
             let rgbaPlanes = new cv.MatVector();
             cv.split(croppedColor, rgbaPlanes);
-            rgbaPlanes.push_back(alphaMask); // Add the mask as the 4th channel (alpha)
+            
+            // Replace or add the alpha channel
+            if (rgbaPlanes.size() === 4) {
+                rgbaPlanes.set(3, alphaMask);
+            } else {
+                rgbaPlanes.push_back(alphaMask); 
+            }
 
             // 6. Merge the color (RGB) and the new alpha channel (A)
             let finalImage = new cv.Mat();
@@ -98,4 +105,3 @@ document.addEventListener('DOMContentLoaded', (event) => {
         scanBtn.addEventListener('click', window.scanDrawing);
     }
 });
-""")
