@@ -1,8 +1,4 @@
 // app.js
-import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
 // --- Configuration ---
 const MAX_PARTICLES = 15000;
@@ -24,7 +20,7 @@ function init() {
     try {
         // 1. Scene & Camera setup
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000); // Crucial for Bloom
+        scene.background = new THREE.Color(0x000000); 
 
         const aspect = window.innerWidth / window.innerHeight;
         camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
@@ -35,13 +31,11 @@ function init() {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        // 3. CINEMATIC BLOOM SETUP
-        const renderScene = new RenderPass(scene, camera);
+        // 3. CINEMATIC BLOOM SETUP (Using Global THREE objects)
+        const renderScene = new THREE.RenderPass(scene, camera);
+        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 3.0, 1.0, 0.1);
         
-        // UnrealBloomPass parameters: (resolution, strength, radius, threshold)
-        const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 3.0, 1.0, 0.1);
-        
-        composer = new EffectComposer(renderer);
+        composer = new THREE.EffectComposer(renderer);
         composer.addPass(renderScene);
         composer.addPass(bloomPass);
 
@@ -69,7 +63,6 @@ function createParticles() {
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    // Particle Texture setup
     const canvas = document.createElement('canvas');
     canvas.width = 64; canvas.height = 64;
     const ctx = canvas.getContext('2d');
@@ -101,7 +94,6 @@ function emitParticle(x, y, baseColor) {
     positions[i3 + 1] = y;
     positions[i3 + 2] = 0;
 
-    // Saturate the colors to push the Bloom threshold
     colors[i3] = baseColor.r * 1.5;
     colors[i3 + 1] = baseColor.g * 1.5;
     colors[i3 + 2] = baseColor.b * 1.5;
@@ -146,7 +138,6 @@ function initMediaPipe() {
         }
     });
 
-    // Native Camera Override to force permissions
     statusUI.innerText = "Requesting Camera Permission...";
     
     navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
@@ -176,12 +167,10 @@ function initMediaPipe() {
 function animate() {
     requestAnimationFrame(animate);
 
-    // Emit new particles
     pointers.forEach(p => {
         for(let i=0; i<4; i++) emitParticle(p.x, p.y, p.color);
     });
 
-    // Update existing particles
     for (let i = 0; i < MAX_PARTICLES; i++) {
         if (lifetimes[i] > 0) {
             const i3 = i * 3;
@@ -202,7 +191,6 @@ function animate() {
     particleSystem.geometry.attributes.position.needsUpdate = true;
     particleSystem.geometry.attributes.color.needsUpdate = true;
 
-    // Render with Post-Processing Bloom
     try {
         composer.render();
     } catch(e) {
@@ -223,5 +211,5 @@ function onWindowResize() {
     composer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Start the engine
-init();
+// Start the app!
+window.onload = init;
