@@ -1,9 +1,11 @@
+print("""
 // scanner.js
 window.scanDrawing = function() {
     console.log("Starting Scan...");
     const video = document.getElementById('video-feed');
     const status = document.getElementById('status');
     
+    // Create a temporary canvas to get the video frame
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -17,18 +19,18 @@ window.scanDrawing = function() {
         // 1. Convert to Gray for contour detection
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
         
-        // 2. Threshold to find drawing boundaries
+        // 2. Threshold to find where the drawing is
         cv.threshold(gray, gray, 150, 255, cv.THRESH_BINARY_INV);
 
-        // 3. Find contours
+        // 3. Find the bounding box of the drawing
         let contours = new cv.MatVector();
         let hierarchy = new cv.Mat();
         cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
         if (contours.size() > 0) {
-            status.innerText = "Drawing detected! Processing background...";
+            status.innerText = "Drawing detected! Isolating subject...";
             
-            // Find largest contour (the bounding box of the drawing)
+            // Find the largest contour
             let maxArea = 0;
             let maxIdx = -1;
             for (let i = 0; i < contours.size(); ++i) {
@@ -37,49 +39,51 @@ window.scanDrawing = function() {
             }
 
             let rect = cv.boundingRect(contours.get(maxIdx));
-            let croppedSrc = src.roi(rect); // The original color image, cropped
+            let croppedColor = src.roi(rect); // The original color image, cropped
             
-            // --- NEW: BACKGROUND REMOVAL LOGIC ---
+            // --- NEW: ADVANCED BACKGROUND REMOVAL LOGIC ---
             
-            // Convert cropped image to RGBA so we have an Alpha channel
-            let dst = new cv.Mat();
-            cv.cvtColor(croppedSrc, dst, cv.COLOR_RGBA2BGRA); // Using BGRA for pixel manipulation
-            
-            // Loop through all pixels in the cropped image
-            for (let i = 0; i < dst.rows; i++) {
-                for (let j = 0; j < dst.cols; j++) {
-                    let pixel = dst.ucharPtr(i, j);
-                    // Check if pixel is "light" (e.g., the white paper)
-                    // If R, G, and B are all high, it's close to white
-                    if (pixel[0] > 180 && pixel[1] > 180 && pixel[2] > 180) {
-                        pixel[3] = 0; // Set Alpha to 0 (Transparent)
-                    }
-                }
-            }
+            // 4. Create an Alpha Mask from the cropped drawing
+            let alphaMask = new cv.Mat();
+            cv.cvtColor(croppedColor, alphaMask, cv.COLOR_RGBA2GRAY);
+            cv.threshold(alphaMask, alphaMask, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
 
-            // Convert back to RGBA for canvas rendering
-            cv.cvtColor(dst, dst, cv.COLOR_BGRA2RGBA);
+            // 5. Add an alpha channel to the color crop
+            let rgbaPlanes = new cv.MatVector();
+            cv.split(croppedColor, rgbaPlanes);
+            rgbaPlanes.push_back(alphaMask); // Add the mask as the 4th channel (alpha)
+
+            // 6. Merge the color (RGB) and the new alpha channel (A)
+            let finalImage = new cv.Mat();
+            cv.merge(rgbaPlanes, finalImage);
 
             // --- END NEW LOGIC ---
 
-            // 4. Create a temporary canvas for the texture
+            // 7. Create a canvas for the final texture
             let texCanvas = document.createElement('canvas');
-            cv.imshow(texCanvas, dst);
+            cv.imshow(texCanvas, finalImage);
 
-            // 5. Pass to Three.js
+            // 8. Pass the isolated drawing to Three.js
             if (window.spawnInThreeJS) {
                 window.spawnInThreeJS(texCanvas);
                 status.innerText = "Drawing isolated and spawned!";
             }
 
-            // Cleanup memory
-            croppedSrc.delete();
-            dst.delete();
+            // Cleanup OpenCV memory
+            croppedColor.delete();
+            alphaMask.delete();
+            rgbaPlanes.delete();
+            finalImage.delete();
+
         } else {
-            status.innerText = "No drawing found. Try better lighting.";
+            status.innerText = "No drawing found. Try better lighting or a darker marker.";
         }
 
-        src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        // Final cleanup
+        src.delete();
+        gray.delete();
+        contours.delete();
+        hierarchy.delete();
 
     } catch (err) {
         console.error("OpenCV Error: ", err);
@@ -87,4 +91,11 @@ window.scanDrawing = function() {
     }
 };
 
-document.getElementById('scan-btn').addEventListener('click', window.scanDrawing);
+// Ensure this listener is attached after the button exists
+document.addEventListener('DOMContentLoaded', (event) => {
+    const scanBtn = document.getElementById('scan-btn');
+    if (scanBtn) {
+        scanBtn.addEventListener('click', window.scanDrawing);
+    }
+});
+""")
