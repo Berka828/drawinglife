@@ -15,7 +15,7 @@
 </head>
 <body>
 
-    <video id="video-feed" autoplay playsinline></video>
+    <video id="video-feed" autoplay playsinline crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
 
     <div id="ui">
@@ -25,17 +25,18 @@
 
     <!-- Core Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     
-    <!-- OpenCV (Async) -->
+    <!-- OpenCV (loads asynchronously) -->
     <script async src="https://docs.opencv.org/4.5.2/opencv.js" onload="onOpenCvReady();"></script>
 
-    <!-- Custom App Logic -->
+    <!-- App Logic (loaded after libraries) -->
     <script src="app.js"></script>
     <script src="scanner.js"></script>
 
     <script>
+        // This function runs when OpenCV is finally loaded, unlocking the scan button.
         function onOpenCvReady() {
             console.log("OpenCV Ready");
             const btn = document.getElementById('scan-btn');
