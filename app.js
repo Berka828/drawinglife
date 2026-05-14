@@ -1,220 +1,291 @@
 // app.js
 
-// --- Configuration ---
-const MAX_PARTICLES = 15000;
-const HAND_COLORS = [
-    new THREE.Color(0x00ffff), // Cyan
-    new THREE.Color(0xff00ff), // Magenta
-    new THREE.Color(0xffff00), // Yellow
-    new THREE.Color(0x00ff88)  // Mint
-];
+// --- CONFIGURATION ---
+const MAX_TREES = 300;
+const MAX_FLOWERS = 500;
+const MAX_RAIN = 1000;
 
-let scene, camera, renderer, composer;
-let particleSystem, positions, colors, velocities, lifetimes;
-let particleIndex = 0;
-let pointers = [];
+// --- GLOBALS ---
+let scene, camera, renderer;
+let treeInstancedMesh, flowerInstancedMesh, rainParticles;
+let treeCount = 0, flowerCount = 0;
+let sunLight, hemiLight;
 
-const statusUI = document.getElementById('status-ui');
+// State tracking
+let weatherState = 'CLEAR'; // 'CLEAR', 'SUN', 'RAIN'
+let windStrength = 0.0;
+let previousChestX = 0;
 
+// To handle smooth growing animations
+const treeData = []; 
+const flowerData = [];
+
+const ui = document.getElementById('ui');
+
+// --- INITIALIZATION ---
 function init() {
-    try {
-        // 1. Scene & Camera setup
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x000000); 
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Sky Blue
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.02);
 
-        const aspect = window.innerWidth / window.innerHeight;
-        // Flat, projection-friendly camera
-        camera = new THREE.OrthographicCamera(-aspect * 5, aspect * 5, 5, -5, 0.1, 100);
-        camera.position.z = 10;
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 5, 20);
+    camera.lookAt(0, 0, 0);
 
-        // 2. Renderer setup
-        renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: false });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
 
-        // 3. CINEMATIC BLOOM SETUP 
-        const renderScene = new THREE.RenderPass(scene, camera);
-        const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.5, 1.0, 0.1);
-        
-        composer = new THREE.EffectComposer(renderer);
-        composer.addPass(renderScene);
-        composer.addPass(bloomPass);
+    setupLighting();
+    setupEnvironment();
+    createProceduralFoliage();
+    createRain();
 
-        // 4. Create the Particles
-        createParticles();
+    window.addEventListener('resize', onWindowResize);
 
-        window.addEventListener('resize', onWindowResize);
+    animate();
+    initMediaPipePose();
+}
 
-        // 5. Start engine
-        animate();
-        initMediaPipe();
-    } catch (e) {
-        statusUI.innerText = "Engine Error: " + e.message;
-        console.error(e);
+function setupLighting() {
+    hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+    scene.add(hemiLight);
+
+    sunLight = new THREE.DirectionalLight(0xffddaa, 1.0);
+    sunLight.position.set(10, 20, 10);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 50;
+    scene.add(sunLight);
+}
+
+function setupEnvironment() {
+    // The Ground
+    const groundGeo = new THREE.PlaneGeometry(100, 100);
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57 }); // Sea Green
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+}
+
+// --- PROCEDURAL GENERATION ---
+function createProceduralFoliage() {
+    // 1. Procedural Tree Geometry (Cone on a Cylinder)
+    const treeGeo = new THREE.Group();
+    
+    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.4, 2, 5);
+    trunkGeo.translate(0, 1, 0); // Move origin to bottom
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    
+    const leavesGeo = new THREE.ConeGeometry(1.5, 3, 5);
+    leavesGeo.translate(0, 3.5, 0);
+    const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+    
+    // Merge into a single BufferGeometry for Instancing
+    const mergedTreeGeo = new THREE.Geometry();
+    trunk.updateMatrix(); mergedTreeGeo.merge(trunk.geometry, trunk.matrix);
+    leaves.updateMatrix(); mergedTreeGeo.merge(leaves.geometry, leaves.matrix);
+    const finalTreeGeo = new THREE.BufferGeometry().fromGeometry(mergedTreeGeo);
+
+    treeInstancedMesh = new THREE.InstancedMesh(finalTreeGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), MAX_TREES);
+    treeInstancedMesh.castShadow = true;
+    treeInstancedMesh.receiveShadow = true;
+    
+    // Hide them all initially by scaling to 0
+    const dummy = new THREE.Object3D();
+    dummy.scale.set(0,0,0);
+    for(let i=0; i<MAX_TREES; i++) {
+        dummy.updateMatrix();
+        treeInstancedMesh.setMatrixAt(i, dummy.matrix);
     }
-}
+    scene.add(treeInstancedMesh);
 
-function createParticles() {
-    const geometry = new THREE.BufferGeometry();
-    positions = new Float32Array(MAX_PARTICLES * 3);
-    colors = new Float32Array(MAX_PARTICLES * 3);
-    velocities = new Float32Array(MAX_PARTICLES * 3);
-    lifetimes = new Float32Array(MAX_PARTICLES);
-
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 64; canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, 'rgba(255,255,255,1)');
-    gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
-    gradient.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 64, 64);
-    const texture = new THREE.CanvasTexture(canvas);
-
-    const material = new THREE.PointsMaterial({
-        size: 80, // <--- THE FIX! 80 PIXELS WIDE
-        map: texture,
-        vertexColors: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        transparent: true
-    });
-
-    particleSystem = new THREE.Points(geometry, material);
+    // 2. Procedural Flower Geometry
+    const flowerGeo = new THREE.DodecahedronGeometry(0.3, 0);
+    flowerGeo.translate(0, 0.3, 0);
+    flowerInstancedMesh = new THREE.InstancedMesh(flowerGeo, new THREE.MeshLambertMaterial({ color: 0xff69b4 }), MAX_FLOWERS); // Hot Pink
     
-    // <--- SAFETY FIX: Forces Three.js to always render the particles even if they fly off-screen
-    particleSystem.frustumCulled = false; 
+    for(let i=0; i<MAX_FLOWERS; i++) {
+        dummy.updateMatrix();
+        flowerInstancedMesh.setMatrixAt(i, dummy.matrix);
+    }
+    scene.add(flowerInstancedMesh);
+}
+
+function createRain() {
+    const rainGeo = new THREE.BufferGeometry();
+    const rainPos = new Float32Array(MAX_RAIN * 3);
+    for(let i=0; i<MAX_RAIN; i++) {
+        rainPos[i*3] = (Math.random() - 0.5) * 40;
+        rainPos[i*3+1] = Math.random() * 20 + 20; // Start high up
+        rainPos[i*3+2] = (Math.random() - 0.5) * 40;
+    }
+    rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+    const rainMat = new THREE.PointsMaterial({ color: 0xaaaaaa, size: 0.1, transparent: true, opacity: 0.6 });
+    rainParticles = new THREE.Points(rainGeo, rainMat);
+    scene.add(rainParticles);
+}
+
+// --- GAME LOGIC ---
+function spawnTree() {
+    if (treeCount >= MAX_TREES) return;
     
-    scene.add(particleSystem);
+    const x = (Math.random() - 0.5) * 40;
+    const z = (Math.random() - 0.5) * 20 - 5; // Keep slightly behind camera
+    
+    treeData.push({ index: treeCount, x: x, z: z, currentScale: 0, targetScale: 0.8 + Math.random() * 0.6 });
+    treeCount++;
 }
 
-function emitParticle(x, y, baseColor) {
-    const i3 = particleIndex * 3;
-
-    positions[i3] = x;
-    positions[i3 + 1] = y;
-    positions[i3 + 2] = 0;
-
-    colors[i3] = baseColor.r * 1.5;
-    colors[i3 + 1] = baseColor.g * 1.5;
-    colors[i3 + 2] = baseColor.b * 1.5;
-
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 0.08; // Slower, more magical spread
-    velocities[i3] = Math.cos(angle) * speed;
-    velocities[i3 + 1] = Math.sin(angle) * speed;
-    velocities[i3 + 2] = 0;
-
-    lifetimes[particleIndex] = 60 + Math.random() * 60; // Live longer
-
-    particleIndex = (particleIndex + 1) % MAX_PARTICLES;
+function spawnFlower() {
+    if (flowerCount >= MAX_FLOWERS) return;
+    
+    const x = (Math.random() - 0.5) * 40;
+    const z = (Math.random() - 0.5) * 15 + 2; // Closer to camera
+    
+    flowerData.push({ index: flowerCount, x: x, z: z, currentScale: 0, targetScale: 0.5 + Math.random() * 0.5 });
+    flowerCount++;
 }
 
-function initMediaPipe() {
+// --- AI TRACKING (MediaPipe Pose) ---
+function initMediaPipePose() {
     const videoElement = document.getElementById('video-feed');
-    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
     
-    hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+    pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
     
-    hands.onResults((results) => {
-        pointers = []; 
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            statusUI.innerText = `Magic Active | Tracking ${results.multiHandLandmarks.length} Hands`;
+    pose.onResults((results) => {
+        if (results.poseLandmarks) {
+            const marks = results.poseLandmarks;
             
-            results.multiHandLandmarks.forEach((landmarks, index) => {
-                const indexTip = landmarks[8]; 
-                const palm = landmarks[0];
-                
-                const aspect = window.innerWidth / window.innerHeight;
-                const viewWidth = aspect * 10;
-                const viewHeight = 10;
-                
-                const color = HAND_COLORS[index % HAND_COLORS.length];
-                
-                pointers.push({ x: -((indexTip.x - 0.5) * viewWidth), y: -((indexTip.y - 0.5) * viewHeight), color: color });
-                pointers.push({ x: -((palm.x - 0.5) * viewWidth), y: -((palm.y - 0.5) * viewHeight), color: color });
-            });
+            // Key Points (Y goes from 0 at top to 1 at bottom)
+            const leftWristY = marks[15].y;
+            const rightWristY = marks[16].y;
+            const noseY = marks[0].y;
+            const leftHipY = marks[23].y; // Note: Hips are actually 23/24, using these roughly
+            
+            const chestX = (marks[11].x + marks[12].x) / 2; // Avg of shoulders
+
+            // 1. Check for WIND (Running)
+            const velocityX = chestX - previousChestX;
+            windStrength = velocityX * 10; // Amplify for shader effect
+            previousChestX = chestX;
+
+            // 2. Check for SUN (Hands high above head)
+            if (leftWristY < noseY && rightWristY < noseY) {
+                weatherState = 'SUN';
+                ui.innerText = "WEATHER: SUNNY ☀️ (Growing Trees!)";
+                if(Math.random() > 0.8) spawnTree(); // Spawn slowly
+            } 
+            // 3. Check for RAIN (Squatting - wrists near hips/knees)
+            else if (leftWristY > leftHipY && rightWristY > leftHipY && noseY > 0.6) {
+                weatherState = 'RAIN';
+                ui.innerText = "WEATHER: RAINING 🌧️ (Growing Flowers!)";
+                if(Math.random() > 0.6) spawnFlower();
+            } 
+            // 4. Default
+            else {
+                weatherState = 'CLEAR';
+                ui.innerText = "WEATHER: CLEAR 🌤️";
+            }
         } else {
-            statusUI.innerText = "Step in front of the camera to play!";
+            ui.innerText = "Step into the camera view!";
         }
     });
 
-    statusUI.innerText = "Requesting Camera Permission...";
-    
     navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
         .then((stream) => {
             videoElement.srcObject = stream;
-            
             videoElement.onloadedmetadata = () => {
                 videoElement.play();
-                
                 const cameraControl = new Camera(videoElement, {
-                    onFrame: async () => { await hands.send({image: videoElement}); },
+                    onFrame: async () => { await pose.send({image: videoElement}); },
                     width: 640, height: 480
                 });
-                
-                cameraControl.start().then(() => {
-                    statusUI.innerText = "Camera Started. Warming up projectors...";
-                });
+                cameraControl.start();
             };
-        })
-        .catch((err) => {
-            console.error("Camera Error:", err);
-            statusUI.innerText = "CAMERA BLOCKED! Check browser permissions.";
-            statusUI.style.color = "red";
         });
 }
 
+// --- RENDER LOOP ---
 function animate() {
     requestAnimationFrame(animate);
 
-    pointers.forEach(p => {
-        for(let i=0; i<4; i++) emitParticle(p.x, p.y, p.color);
+    const dummy = new THREE.Object3D();
+    const time = Date.now() * 0.002;
+
+    // 1. Animate Trees (Growth & Wind)
+    treeData.forEach(tree => {
+        // Growth easing
+        if(tree.currentScale < tree.targetScale) tree.currentScale += 0.02;
+        
+        // Apply wind (bend the tree)
+        const bend = Math.sin(time + tree.x) * 0.1 + windStrength;
+        
+        dummy.position.set(tree.x, 0, tree.z);
+        dummy.rotation.set(0, 0, bend); 
+        dummy.scale.set(tree.currentScale, tree.currentScale, tree.currentScale);
+        dummy.updateMatrix();
+        treeInstancedMesh.setMatrixAt(tree.index, dummy.matrix);
     });
+    if(treeCount > 0) treeInstancedMesh.instanceMatrix.needsUpdate = true;
 
-    for (let i = 0; i < MAX_PARTICLES; i++) {
-        if (lifetimes[i] > 0) {
-            const i3 = i * 3;
-            positions[i3] += velocities[i3];
-            positions[i3 + 1] += velocities[i3 + 1];
-            velocities[i3 + 1] -= 0.001; // Gentle gravity
-            velocities[i3] *= 0.98; // Air friction
-            lifetimes[i]--;
+    // 2. Animate Flowers
+    flowerData.forEach(flower => {
+        if(flower.currentScale < flower.targetScale) flower.currentScale += 0.05;
+        
+        dummy.position.set(flower.x, 0, flower.z);
+        dummy.rotation.set(0, time, 0); // Spin slightly
+        dummy.scale.set(flower.currentScale, flower.currentScale, flower.currentScale);
+        dummy.updateMatrix();
+        flowerInstancedMesh.setMatrixAt(flower.index, dummy.matrix);
+    });
+    if(flowerCount > 0) flowerInstancedMesh.instanceMatrix.needsUpdate = true;
 
-            if (lifetimes[i] < 20) {
-                colors[i3] *= 0.85; colors[i3 + 1] *= 0.85; colors[i3 + 2] *= 0.85;
-            }
-        } else {
-            positions[i * 3 + 1] = -100; // Move dead particles off screen
+    // 3. Handle Weather Environment
+    if (weatherState === 'RAIN') {
+        // Drop rain particles
+        const positions = rainParticles.geometry.attributes.position.array;
+        for(let i=1; i<MAX_RAIN*3; i+=3) {
+            positions[i] -= 0.5; // Fall speed
+            if(positions[i] < 0) positions[i] = 20; // Reset to sky
         }
+        rainParticles.geometry.attributes.position.needsUpdate = true;
+        scene.fog.color.setHex(0x555555);
+        scene.background.setHex(0x555555);
+        sunLight.intensity = 0.2; // Dim light
+    } else if (weatherState === 'SUN') {
+        // Brighten
+        scene.fog.color.setHex(0xffddaa);
+        scene.background.setHex(0x87CEEB);
+        sunLight.intensity = 1.5;
+        // Move rain out of sight
+        const positions = rainParticles.geometry.attributes.position.array;
+        for(let i=1; i<MAX_RAIN*3; i+=3) positions[i] = 50; 
+        rainParticles.geometry.attributes.position.needsUpdate = true;
+    } else {
+        // Clear
+        scene.fog.color.setHex(0x87CEEB);
+        scene.background.setHex(0x87CEEB);
+        sunLight.intensity = 1.0;
     }
 
-    particleSystem.geometry.attributes.position.needsUpdate = true;
-    particleSystem.geometry.attributes.color.needsUpdate = true;
+    // Decay wind
+    windStrength *= 0.9;
 
-    try {
-        composer.render();
-    } catch(e) {
-        console.error("Render Loop Error:", e);
-        statusUI.innerText = "Error during render. Check console.";
-    }
+    renderer.render(scene, camera);
 }
 
 function onWindowResize() {
-    const aspect = window.innerWidth / window.innerHeight;
-    camera.left = -aspect * 5;
-    camera.right = aspect * 5;
-    camera.top = 5;
-    camera.bottom = -5;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    
     renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Start the app!
 window.onload = init;
