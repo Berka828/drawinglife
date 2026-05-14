@@ -1,31 +1,26 @@
 // app.js
 
-// --- CONFIGURATION ---
 const MAX_TREES = 300;
 const MAX_FLOWERS = 500;
 const MAX_RAIN = 1000;
 
-// --- GLOBALS ---
 let scene, camera, renderer;
 let treeInstancedMesh, flowerInstancedMesh, rainParticles;
 let treeCount = 0, flowerCount = 0;
 let sunLight, hemiLight;
 
-// State tracking
-let weatherState = 'CLEAR'; // 'CLEAR', 'SUN', 'RAIN'
+let weatherState = 'CLEAR'; 
 let windStrength = 0.0;
 let previousChestX = 0;
 
-// To handle smooth growing animations
 const treeData = []; 
 const flowerData = [];
-
 const ui = document.getElementById('ui');
 
-// --- INITIALIZATION ---
 function init() {
+    // 1. Scene Setup
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Sky Blue
+    scene.background = new THREE.Color(0x87CEEB); 
     scene.fog = new THREE.FogExp2(0x87CEEB, 0.02);
 
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -35,86 +30,62 @@ function init() {
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webgl-canvas'), antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
 
-    setupLighting();
-    setupEnvironment();
-    createProceduralFoliage();
-    createRain();
-
-    window.addEventListener('resize', onWindowResize);
-
-    animate();
-    initMediaPipePose();
-}
-
-function setupLighting() {
+    // 2. Lights
     hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
     scene.add(hemiLight);
 
     sunLight = new THREE.DirectionalLight(0xffddaa, 1.0);
     sunLight.position.set(10, 20, 10);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 50;
     scene.add(sunLight);
-}
 
-function setupEnvironment() {
-    // The Ground
+    // 3. Ground
     const groundGeo = new THREE.PlaneGeometry(100, 100);
-    const groundMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57 }); // Sea Green
+    const groundMat = new THREE.MeshLambertMaterial({ color: 0x2e8b57 }); 
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
     scene.add(ground);
+
+    // 4. Create Elements
+    createProceduralFoliage();
+    createRain();
+
+    window.addEventListener('resize', onWindowResize);
+
+    // 5. Start Loops
+    animate();
+    initMediaPipePose();
 }
 
-// --- PROCEDURAL GENERATION ---
 function createProceduralFoliage() {
-    // 1. Procedural Tree Geometry (Cone on a Cylinder)
-    const treeGeo = new THREE.Group();
-    
-    const trunkGeo = new THREE.CylinderGeometry(0.2, 0.4, 2, 5);
-    trunkGeo.translate(0, 1, 0); // Move origin to bottom
-    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    
-    const leavesGeo = new THREE.ConeGeometry(1.5, 3, 5);
-    leavesGeo.translate(0, 3.5, 0);
-    const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-    const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-    
-    // Merge into a single BufferGeometry for Instancing
-    const mergedTreeGeo = new THREE.Geometry();
-    trunk.updateMatrix(); mergedTreeGeo.merge(trunk.geometry, trunk.matrix);
-    leaves.updateMatrix(); mergedTreeGeo.merge(leaves.geometry, leaves.matrix);
-    const finalTreeGeo = new THREE.BufferGeometry().fromGeometry(mergedTreeGeo);
+    // Simple blocky trees for high performance
+    const treeGeo = new THREE.CylinderGeometry(0, 1.5, 4, 4); // A simple pyramid shape
+    treeGeo.translate(0, 2, 0); // Move up so base is at 0
+    const treeMat = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Forest Green
 
-    treeInstancedMesh = new THREE.InstancedMesh(finalTreeGeo, new THREE.MeshLambertMaterial({ vertexColors: true }), MAX_TREES);
-    treeInstancedMesh.castShadow = true;
-    treeInstancedMesh.receiveShadow = true;
+    // Must clone the material to avoid sharing matrix bugs in some Threejs versions
+    treeInstancedMesh = new THREE.InstancedMesh(treeGeo, treeMat.clone(), MAX_TREES);
     
-    // Hide them all initially by scaling to 0
+    // Hide initially
     const dummy = new THREE.Object3D();
     dummy.scale.set(0,0,0);
     for(let i=0; i<MAX_TREES; i++) {
         dummy.updateMatrix();
         treeInstancedMesh.setMatrixAt(i, dummy.matrix);
     }
+    treeInstancedMesh.instanceMatrix.needsUpdate = true;
     scene.add(treeInstancedMesh);
 
-    // 2. Procedural Flower Geometry
-    const flowerGeo = new THREE.DodecahedronGeometry(0.3, 0);
+    // Flowers (simple spheres)
+    const flowerGeo = new THREE.SphereGeometry(0.3, 8, 8);
     flowerGeo.translate(0, 0.3, 0);
-    flowerInstancedMesh = new THREE.InstancedMesh(flowerGeo, new THREE.MeshLambertMaterial({ color: 0xff69b4 }), MAX_FLOWERS); // Hot Pink
+    flowerInstancedMesh = new THREE.InstancedMesh(flowerGeo, new THREE.MeshLambertMaterial({ color: 0xff69b4 }), MAX_FLOWERS); 
     
     for(let i=0; i<MAX_FLOWERS; i++) {
         dummy.updateMatrix();
         flowerInstancedMesh.setMatrixAt(i, dummy.matrix);
     }
+    flowerInstancedMesh.instanceMatrix.needsUpdate = true;
     scene.add(flowerInstancedMesh);
 }
 
@@ -123,7 +94,7 @@ function createRain() {
     const rainPos = new Float32Array(MAX_RAIN * 3);
     for(let i=0; i<MAX_RAIN; i++) {
         rainPos[i*3] = (Math.random() - 0.5) * 40;
-        rainPos[i*3+1] = Math.random() * 20 + 20; // Start high up
+        rainPos[i*3+1] = 50; // Start hidden above view
         rainPos[i*3+2] = (Math.random() - 0.5) * 40;
     }
     rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
@@ -132,31 +103,27 @@ function createRain() {
     scene.add(rainParticles);
 }
 
-// --- GAME LOGIC ---
 function spawnTree() {
     if (treeCount >= MAX_TREES) return;
-    
     const x = (Math.random() - 0.5) * 40;
-    const z = (Math.random() - 0.5) * 20 - 5; // Keep slightly behind camera
-    
-    treeData.push({ index: treeCount, x: x, z: z, currentScale: 0, targetScale: 0.8 + Math.random() * 0.6 });
+    const z = (Math.random() - 0.5) * 20 - 5; 
+    treeData.push({ index: treeCount, x: x, z: z, currentScale: 0, targetScale: 0.8 + Math.random() * 0.8 });
     treeCount++;
 }
 
 function spawnFlower() {
     if (flowerCount >= MAX_FLOWERS) return;
-    
     const x = (Math.random() - 0.5) * 40;
-    const z = (Math.random() - 0.5) * 15 + 2; // Closer to camera
-    
+    const z = (Math.random() - 0.5) * 15 + 2; 
     flowerData.push({ index: flowerCount, x: x, z: z, currentScale: 0, targetScale: 0.5 + Math.random() * 0.5 });
     flowerCount++;
 }
 
-// --- AI TRACKING (MediaPipe Pose) ---
 function initMediaPipePose() {
     const videoElement = document.getElementById('video-feed');
-    const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+    
+    // Explicit CDN path to avoid resolution errors
+    const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`});
     
     pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
     
@@ -164,32 +131,33 @@ function initMediaPipePose() {
         if (results.poseLandmarks) {
             const marks = results.poseLandmarks;
             
-            // Key Points (Y goes from 0 at top to 1 at bottom)
+            // Y is 0 at top, 1 at bottom
             const leftWristY = marks[15].y;
             const rightWristY = marks[16].y;
             const noseY = marks[0].y;
-            const leftHipY = marks[23].y; // Note: Hips are actually 23/24, using these roughly
             
-            const chestX = (marks[11].x + marks[12].x) / 2; // Avg of shoulders
+            // Use knees/ankles to detect squatting
+            const leftKneeY = marks[25].y;
+            const chestX = (marks[11].x + marks[12].x) / 2; 
 
-            // 1. Check for WIND (Running)
+            // Wind
             const velocityX = chestX - previousChestX;
-            windStrength = velocityX * 10; // Amplify for shader effect
+            windStrength = velocityX * 10; 
             previousChestX = chestX;
 
-            // 2. Check for SUN (Hands high above head)
+            // SUN: Hands above head
             if (leftWristY < noseY && rightWristY < noseY) {
                 weatherState = 'SUN';
-                ui.innerText = "WEATHER: SUNNY ☀️ (Growing Trees!)";
-                if(Math.random() > 0.8) spawnTree(); // Spawn slowly
+                ui.innerText = "WEATHER: SUNNY ☀️";
+                if(Math.random() > 0.8) spawnTree(); 
             } 
-            // 3. Check for RAIN (Squatting - wrists near hips/knees)
-            else if (leftWristY > leftHipY && rightWristY > leftHipY && noseY > 0.6) {
+            // RAIN: Hands near knees (squatting)
+            else if (leftWristY > leftKneeY && rightWristY > leftKneeY && noseY > 0.4) {
                 weatherState = 'RAIN';
-                ui.innerText = "WEATHER: RAINING 🌧️ (Growing Flowers!)";
+                ui.innerText = "WEATHER: RAINING 🌧️";
                 if(Math.random() > 0.6) spawnFlower();
             } 
-            // 4. Default
+            // DEFAULT
             else {
                 weatherState = 'CLEAR';
                 ui.innerText = "WEATHER: CLEAR 🌤️";
@@ -199,6 +167,8 @@ function initMediaPipePose() {
         }
     });
 
+    ui.innerText = "Requesting Camera...";
+    
     navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
         .then((stream) => {
             videoElement.srcObject = stream;
@@ -208,84 +178,78 @@ function initMediaPipePose() {
                     onFrame: async () => { await pose.send({image: videoElement}); },
                     width: 640, height: 480
                 });
-                cameraControl.start();
+                cameraControl.start().then(() => {
+                    ui.innerText = "Camera Active. Play!";
+                });
             };
+        }).catch((err) => {
+            console.error("Camera Error:", err);
+            ui.innerText = "CAMERA BLOCKED! Allow camera to play.";
         });
 }
 
-// --- RENDER LOOP ---
 function animate() {
     requestAnimationFrame(animate);
 
     const dummy = new THREE.Object3D();
     const time = Date.now() * 0.002;
 
-    // 1. Animate Trees (Growth & Wind)
+    // Animate Trees
+    let needsTreeUpdate = false;
     treeData.forEach(tree => {
-        // Growth easing
-        if(tree.currentScale < tree.targetScale) tree.currentScale += 0.02;
+        if(tree.currentScale < tree.targetScale) {
+            tree.currentScale += 0.02;
+            needsTreeUpdate = true;
+        }
         
-        // Apply wind (bend the tree)
-        const bend = Math.sin(time + tree.x) * 0.1 + windStrength;
+        const bend = Math.sin(time + tree.x) * 0.05 + windStrength; // Sway
         
         dummy.position.set(tree.x, 0, tree.z);
         dummy.rotation.set(0, 0, bend); 
         dummy.scale.set(tree.currentScale, tree.currentScale, tree.currentScale);
         dummy.updateMatrix();
         treeInstancedMesh.setMatrixAt(tree.index, dummy.matrix);
+        needsTreeUpdate = true;
     });
-    if(treeCount > 0) treeInstancedMesh.instanceMatrix.needsUpdate = true;
+    if(needsTreeUpdate) treeInstancedMesh.instanceMatrix.needsUpdate = true;
 
-    // 2. Animate Flowers
+    // Animate Flowers
+    let needsFlowerUpdate = false;
     flowerData.forEach(flower => {
-        if(flower.currentScale < flower.targetScale) flower.currentScale += 0.05;
+        if(flower.currentScale < flower.targetScale) {
+            flower.currentScale += 0.05;
+            needsFlowerUpdate = true;
+        }
         
         dummy.position.set(flower.x, 0, flower.z);
-        dummy.rotation.set(0, time, 0); // Spin slightly
+        dummy.rotation.set(0, time, 0); 
         dummy.scale.set(flower.currentScale, flower.currentScale, flower.currentScale);
         dummy.updateMatrix();
         flowerInstancedMesh.setMatrixAt(flower.index, dummy.matrix);
     });
-    if(flowerCount > 0) flowerInstancedMesh.instanceMatrix.needsUpdate = true;
+    if(needsFlowerUpdate) flowerInstancedMesh.instanceMatrix.needsUpdate = true;
 
-    // 3. Handle Weather Environment
+    // Weather Effects
     if (weatherState === 'RAIN') {
-        // Drop rain particles
         const positions = rainParticles.geometry.attributes.position.array;
         for(let i=1; i<MAX_RAIN*3; i+=3) {
-            positions[i] -= 0.5; // Fall speed
-            if(positions[i] < 0) positions[i] = 20; // Reset to sky
+            positions[i] -= 0.8; // Rain speed
+            if(positions[i] < 0) positions[i] = 20; 
         }
         rainParticles.geometry.attributes.position.needsUpdate = true;
-        scene.fog.color.setHex(0x555555);
-        scene.background.setHex(0x555555);
-        sunLight.intensity = 0.2; // Dim light
+        
+        scene.fog.color.lerp(new THREE.Color(0x555555), 0.05);
+        scene.background.lerp(new THREE.Color(0x555555), 0.05);
+        sunLight.intensity = Math.max(0.2, sunLight.intensity - 0.05);
     } else if (weatherState === 'SUN') {
-        // Brighten
-        scene.fog.color.setHex(0xffddaa);
-        scene.background.setHex(0x87CEEB);
-        sunLight.intensity = 1.5;
-        // Move rain out of sight
         const positions = rainParticles.geometry.attributes.position.array;
-        for(let i=1; i<MAX_RAIN*3; i+=3) positions[i] = 50; 
+        for(let i=1; i<MAX_RAIN*3; i+=3) positions[i] = 50; // Hide rain
         rainParticles.geometry.attributes.position.needsUpdate = true;
+
+        scene.fog.color.lerp(new THREE.Color(0xffddaa), 0.05);
+        scene.background.lerp(new THREE.Color(0x87CEEB), 0.05);
+        sunLight.intensity = Math.min(1.5, sunLight.intensity + 0.05);
     } else {
-        // Clear
-        scene.fog.color.setHex(0x87CEEB);
-        scene.background.setHex(0x87CEEB);
-        sunLight.intensity = 1.0;
-    }
-
-    // Decay wind
-    windStrength *= 0.9;
-
-    renderer.render(scene, camera);
-}
-
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-window.onload = init;
+        scene.fog.color.lerp(new THREE.Color(0x87CEEB), 0.05);
+        scene.background.lerp(new THREE.Color(0x87CEEB), 0.05);
+        sunLight.intensity = Math.min(1.0, sunLight.intensity + 0.05);
