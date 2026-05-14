@@ -26,7 +26,8 @@
 </head>
 <body>
 
-    <video id="video-feed" autoplay playsinline crossorigin="anonymous"></video>
+    <!-- CRITICAL: Added 'muted' to allow autoplay in modern browsers -->
+    <video id="video-feed" autoplay playsinline muted crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
     
     <div id="status-ui">Loading High-Res Engine...</div>
