@@ -3,38 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BxCM | Magical Bloom Wall</title>
+    <title>BxCM | The Living Forest</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif;}
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif;}
         #webgl-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
         #video-feed { display: none; }
-        #status-ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.8); z-index: 10; pointer-events: none; font-weight: bold; font-size: 18px; text-shadow: 0px 0px 5px #000;}
+        #ui { position: absolute; top: 20px; left: 20px; color: white; z-index: 10; font-weight: bold; font-size: 24px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);}
+        #instructions { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: white; z-index: 10; font-size: 20px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); text-align: center;}
     </style>
 
-    <!-- 1. Core Three.js (r128 - Bulletproof version) -->
+    <!-- Three.js (r128) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    <!-- 2. Post-Processing Dependencies -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
-
-    <!-- 3. MediaPipe -->
+    <!-- MediaPipe POSE (Not Hands) -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 </head>
 <body>
 
     <video id="video-feed" autoplay playsinline muted crossorigin="anonymous"></video>
     <canvas id="webgl-canvas"></canvas>
     
-    <div id="status-ui">Loading High-Res Engine...</div>
+    <div id="ui">Initializing Forest Engine...</div>
+    <div id="instructions">Stand Tall for SUN ☀️ | Squat Down for RAIN 🌧️ | Run for WIND 🌬️</div>
 
-    <!-- 4. Our App Logic (Standard Script, NO module) -->
     <script src="app.js"></script>
-
 </body>
 </html>
